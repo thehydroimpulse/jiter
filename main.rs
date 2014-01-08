@@ -5,6 +5,31 @@ use std::os;
 use std::vec;
 use std::fmt;
 
+pub mod raw {
+    use std::*;
+
+    extern {
+        fn mmap(addr : *libc::c_char, length : libc::size_t,
+                prot : libc::c_int,   flags  : libc::c_int,
+                fd   : libc::c_int,   offset : libc::off_t) -> *u8;
+        fn munmap(addr : *u8, length : libc::size_t) -> libc::c_int;
+    }
+
+    /* From /usr/include/asm-generic/mman-common.h on Linux */
+
+    /* prot values */
+    pub static PROT_NONE   : libc::c_int = 0x0;
+    pub static PROT_READ   : libc::c_int = 0x1;
+    pub static PROT_WRITE  : libc::c_int = 0x2;
+    pub static PROT_EXEC   : libc::c_int = 0x4;
+    // ...
+
+    /* flags */
+    pub static MAP_SHARED  : libc::c_int = 0x1;
+    pub static MAP_PRIVATE : libc::c_int = 0x2;
+    // ...
+}
+
 struct MappedRegion {
   addr: *libc::c_void,
   len: libc::size_t
@@ -34,14 +59,14 @@ impl Drop for MappedRegion {
 #[fixed_stack_segment]
 fn mmap(size: size_t) -> Result<MappedRegion, ~str> {
   unsafe {
-    let ptr = libc::mmap(0 as *libc::c_void, size,
+    let buf = raw::mmap(0 as *libc::c_char, size,
       libc::PROT_READ | libc::PROT_WRITE,
       libc::MAP_PRIVATE | libc::MAP_ANON,
-      -1, 0) as *libc::c_void;
-    return if ptr == libc::MAP_FAILED {
+      -1, 0);
+    return if buf == -1 as *u8 {
       Err(os::last_os_error())
     } else {
-      Ok(MappedRegion{ addr: ptr, len: size })
+      Ok(MappedRegion{ addr: buf as *libc::c_void, len: size })
     }
   }
 }
@@ -71,12 +96,12 @@ fn main() {
   // 0:  c6 03 02  mov    BYTE PTR [ebx],2
   // 3:  83 c3 05  add    ebx,5
   let code = [
-    0xC6, 0x00, 0x05, 0x83, 0xC0, 0x0A, 0xC3
+  0xC6, 0x00, 0x05, 0x83, 0xC0, 0x0A, 0xC3
   ];
 
   unsafe {
 
-    let m = match mmap(40) {
+    let m = match mmap(1024) {
       Ok(r) => r,
       Err(s) => fail!("err: %?", s)
     };
