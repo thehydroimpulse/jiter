@@ -13,6 +13,7 @@ pub mod raw {
                 prot : libc::c_int,   flags  : libc::c_int,
                 fd   : libc::c_int,   offset : libc::off_t) -> *u8;
         fn munmap(addr : *u8, length : libc::size_t) -> libc::c_int;
+        fn mprotect(addr: *libc::c_char, length: libc::size_t, prot: libc::c_int) -> libc::c_int;
     }
 
     /* From /usr/include/asm-generic/mman-common.h on Linux */
@@ -31,7 +32,7 @@ pub mod raw {
 }
 
 struct MappedRegion {
-  addr: *libc::c_void,
+  addr: *u8,
   len: libc::size_t
 }
 
@@ -42,38 +43,34 @@ impl fmt::Default for MappedRegion {
 }
 
 impl Drop for MappedRegion {
+  #[inline(never)]
   #[fixed_stack_segment]
   fn drop(&mut self) {
-    debug!(format!("munmapping {}", self.addr));
     unsafe {
-      if libc::munmap(self.addr, self.len) < 0 {
+      if raw::munmap(self.addr, self.len) < 0 {
         fail!(format!("munmap({}, {}): {}", self.addr, self.len, os::last_os_error()));
-      } else {
-        self.addr = 0 as *libc::c_void;
-        self.len  = 0;
       }
     }
   }
 }
 
+#[inline(never)]
 #[fixed_stack_segment]
-fn mmap(size: size_t) -> Result<MappedRegion, ~str> {
-  unsafe {
-    let buf = raw::mmap(0 as *libc::c_char, size,
-      libc::PROT_READ | libc::PROT_WRITE,
-      libc::MAP_PRIVATE | libc::MAP_ANON,
-      -1, 0);
-    return if buf == -1 as *u8 {
-      Err(os::last_os_error())
-    } else {
-      Ok(MappedRegion{ addr: buf as *libc::c_void, len: size })
-    }
+unsafe fn mmap(size: size_t) -> Result<MappedRegion, ~str> {
+  let buf = raw::mmap(0 as *libc::c_char, size,
+    libc::PROT_READ | libc::PROT_WRITE,
+    libc::MAP_PRIVATE | libc::MAP_ANON,
+    -1, 0);
+  return if buf == -1 as *u8 {
+    Err(os::last_os_error())
+  } else {
+    Ok(MappedRegion{ addr: buf, len: size })
   }
 }
 
 #[fixed_stack_segment]
-pub unsafe fn make_mem_exec(m: *c_void, size: size_t) -> int {
-  if mprotect(m, size, libc::PROT_READ | PROT_EXEC) == -1 {
+pub unsafe fn make_mem_exec(m: *u8, size: size_t) -> int {
+  if raw::mprotect(m as *libc::c_char, size, libc::PROT_READ | PROT_EXEC) == -1 {
     fail!("err: mprotect");
   }
 
