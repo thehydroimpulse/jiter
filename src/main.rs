@@ -1,19 +1,25 @@
+#[crate_id = "jiter#0.0.1"]
+#[desc = "Jiter"]
+#[license = "MIT"]
+#[crate_type = "bin"]
+#[feature(globs)]
+
 use std::ptr;
-use std::libc::*;
+use std::libc::{c_char, c_int, size_t, off_t, c_void, mmap, PROT_EXEC};
 use std::libc;
 use std::os;
 use std::vec;
-use std::fmt;
+use std::println;
+use std::cast;
 
 pub mod raw {
-    use std::*;
-
+    use std::libc;
     extern {
-        fn mmap(addr : *libc::c_char, length : libc::size_t,
+        pub fn mmap(addr : *libc::c_char, length : libc::size_t,
                 prot : libc::c_int,   flags  : libc::c_int,
                 fd   : libc::c_int,   offset : libc::off_t) -> *u8;
-        fn munmap(addr : *u8, length : libc::size_t) -> libc::c_int;
-        fn mprotect(addr: *libc::c_char, length: libc::size_t, prot: libc::c_int) -> libc::c_int;
+        pub fn munmap(addr : *u8, length : libc::size_t) -> libc::c_int;
+        pub fn mprotect(addr: *libc::c_char, length: libc::size_t, prot: libc::c_int) -> libc::c_int;
     }
 
     /* From /usr/include/asm-generic/mman-common.h on Linux */
@@ -36,7 +42,7 @@ struct MappedRegion {
   len: libc::size_t
 }
 
-impl fmt::Default for MappedRegion {
+impl std::fmt::Default for MappedRegion {
   fn fmt(value: &MappedRegion, f: &mut std::fmt::Formatter) {
     write!(f.buf, "MappedRegion\\{{}, {}\\}", value.addr, value.len);
   }
@@ -44,7 +50,6 @@ impl fmt::Default for MappedRegion {
 
 impl Drop for MappedRegion {
   #[inline(never)]
-  #[fixed_stack_segment]
   fn drop(&mut self) {
     unsafe {
       if raw::munmap(self.addr, self.len) < 0 {
@@ -55,7 +60,6 @@ impl Drop for MappedRegion {
 }
 
 #[inline(never)]
-#[fixed_stack_segment]
 unsafe fn mmap(size: size_t) -> Result<MappedRegion, ~str> {
   let buf = raw::mmap(0 as *libc::c_char, size,
     libc::PROT_READ | libc::PROT_WRITE,
@@ -68,7 +72,6 @@ unsafe fn mmap(size: size_t) -> Result<MappedRegion, ~str> {
   }
 }
 
-#[fixed_stack_segment]
 pub unsafe fn make_mem_exec(m: *u8, size: size_t) -> int {
   if raw::mprotect(m as *libc::c_char, size, libc::PROT_READ | PROT_EXEC) == -1 {
     fail!("err: mprotect");
@@ -78,15 +81,9 @@ pub unsafe fn make_mem_exec(m: *u8, size: size_t) -> int {
 }
 
 // Guessing the bus error is here.
-#[fixed_stack_segment]
 pub unsafe fn emit_code(src: &[u8], mem: &MappedRegion) {
-  ptr::copy_memory(mem.addr as *mut c_void, vec::raw::to_ptr(src) as *mut c_void, src.len());
+  ptr::copy_memory(mem.addr as *mut c_void, src.as_ptr() as *mut c_void, src.len());
 }
-
-fn add(a: u32) -> u32 {
-  a + 4
-}
-
 
 fn main() {
 
@@ -100,17 +97,18 @@ fn main() {
 
     let m = match mmap(1024) {
       Ok(r) => r,
-      Err(s) => fail!("err: %?", s)
+      Err(s) => fail!("err: {}", s)
     };
 
     emit_code(code, &m);
     make_mem_exec(m.addr, m.len);
 
-    let mut JITFn: extern fn(num: u32) -> u32;
-    JITFn = m.addr as extern fn(num: u32) -> u32;
+    let JITFn: extern "C" fn(num: u32) -> u32 =
+      cast::transmute(m.addr);
+    //JITFn = m.addr as |num: u32| -> u32;
     println!("Function: {}", m);
     let result = JITFn(2);
-    println(fmt!("result: {%?}", result as int));
+    println!("result: {}", result as int);
     println("Works");
   }
 }
