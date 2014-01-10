@@ -36,7 +36,7 @@ pub mod raw {
 
 struct MappedRegion {
     addr: *u8,
-    len: libc::size_t
+    len: u64
 }
 
 impl std::fmt::Default for MappedRegion {
@@ -82,6 +82,16 @@ pub unsafe fn emit_code(src: *u8, len: uint, mem: &MappedRegion) {
     ptr::copy_memory(mem.addr as *mut c_void, src as *mut c_void, len);
 }
 
+unsafe fn safe_mmap(size: u64) -> Result<MappedRegion, ~str> {
+    let buf = raw::mmap(0 as *libc::c_char, size, libc::PROT_READ | libc::PROT_WRITE,
+        libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0);
+    if buf == -1 as *u8 {
+        Err(os::last_os_error())
+    } else {
+        Ok(MappedRegion{ addr: buf, len: size })
+    }
+}
+
 fn main() {
 
   let code = [
@@ -92,19 +102,22 @@ fn main() {
 
   unsafe {
 
-        //let m = match mmap(1024) {
-            // Ok(r) => r,
-            // Err(s) => fail!("err: {}", s)
-        //};
+        //println("mmapping a new memory region: [writable] [readable] [private] [anon]");
+        //let buf = raw::mmap(0 as *libc::c_char, code.len() as u64, libc::PROT_READ | libc::PROT_WRITE,
+        //    libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0);
 
-        let buf = raw::mmap(0 as *libc::c_char, code.len() as u64, libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0);
+        //if buf == -1 as *u8 {
+        //    fail!(os::last_os_error());
+        //}
 
-        if buf == -1 as *u8 {
-            fail!(os::last_os_error());
-        }
+        let region = match safe_mmap(code.len() as u64) {
+            Ok(r) => r,
+            Err(err) => fail!(err)
+        };
 
-        println("copying the memory contents.");
+        let buf = region.addr;
+
+        println("copying machine code into memory.");
         raw::memcpy(buf as * c_void, code.as_ptr() as *c_void, code.len() as size_t);
 
         println!("original: {} mmapped: {}", *(code.as_ptr()), *buf);
@@ -117,14 +130,15 @@ fn main() {
             fail!("err: mprotect");
         }
 
-        //emit_code(code.as_ptr(), code.len(), &m);
-        //make_mem_exec(m.addr, m.len);
-
         let func: JitFn = cast::transmute(buf);
-        //JITFn = m.addr as |num: u32| -> u32;
-        //println!("Function: {}", m);
         let value = func(5);
-        //println!("result: {}", result);
+
         println!("func(): {}", value);
+
+        println!("munmapping memory region: {}", buf);
+        // Free the mmapped memory page:
+        if raw::munmap(buf, code.len() as u64) < 0 {
+            fail!(format!("munmap({}, {}): {}", buf, code.len(), os::last_os_error()));
+        }
     }
 }
