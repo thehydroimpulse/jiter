@@ -2,7 +2,6 @@
 #[desc = "Jiter"];
 #[crate_type = "bin"];
 #[license = "MIT"];
-#[feature(macro_rules)];
 #[allow(dead_code)];
 
 use std::cast;
@@ -43,8 +42,9 @@ fn test_jit_func() {
         Err(err) => fail!(err)
     };
 
-    type AddFourFn = extern "C" fn(n: int) -> int;
-    let Add = jit_func::<AddFourFn>(contents, region);
+    let Add = jit_func::<extern "C" fn(int) -> int>
+        (contents, region);
+
     assert_eq!(Add(4), 8);
     println!("value: {}", Add(4));
 }
