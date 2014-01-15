@@ -5,7 +5,7 @@
 #[feature(macro_rules)];
 #[allow(dead_code)];
 
-use std::libc::{c_char, size_t, c_void, PROT_EXEC};
+use std::libc::{c_char, size_t, c_void};
 use std::libc;
 use std::os;
 use std::cast;
@@ -30,6 +30,7 @@ pub fn safe_memcpy(region: &MappedRegion, contents: &[u8]) {
             region.addr as * c_void,
             contents.as_ptr() as *c_void,
             contents.len() as size_t);
+        assert_eq!(*(contents.as_ptr()), *region.addr);
     }
 }
 
@@ -60,8 +61,14 @@ fn test_safe_memcpy() {
 
 fn safe_mmap(size: u64) -> Result<MappedRegion, ~str> {
     unsafe {
-        let buf = raw::mmap(0 as *libc::c_char, size, libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0);
+        let buf = raw::mmap(
+            0 as *libc::c_char,
+            size,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_PRIVATE | libc::MAP_ANON,
+            -1,
+            0
+        );
 
         if buf == -1 as *u8 {
             Err(os::last_os_error())
@@ -76,7 +83,7 @@ fn safe_mem_protect(region: &MappedRegion, contents: &[u8]) {
         if raw::mprotect(
             region.addr as *libc::c_char,
             contents.len() as u64,
-            libc::PROT_READ | PROT_EXEC
+            libc::PROT_READ | libc::PROT_EXEC
         ) == -1 {
             fail!("err: mprotect failed to protect the memory region.");
         }
@@ -91,23 +98,19 @@ fn safe_mem_protect(region: &MappedRegion, contents: &[u8]) {
  * @param {&[u8]} contents
  */
 
-fn jit_func<F>(contents: &[u8]) -> F {
+fn jit_func<T>(contents: &[u8]) -> T {
     let region = match safe_mmap(contents.len() as u64) {
         Ok(r) => r,
         Err(err) => fail!(err)
     };
 
     safe_memcpy(&region, contents);
-
-    // Check the contents of the new mapped memory region.
-    unsafe {
-        assert_eq!(*(contents.as_ptr()), *region.addr);
-    }
-
     safe_mem_protect(&region, contents);
 
     unsafe {
-        let func: F = cast::transmute(region.addr);
+        assert_eq!(*(contents.as_ptr()), *region.addr);
+        println!("{} {}", region.len, contents.len());
+        let func: T = cast::transmute(region.addr);
         return func;
     }
 }
@@ -121,7 +124,7 @@ fn test_jit_func() {
     ];
 
     type Func = extern "C" fn(n: int) -> int;
-    let func = jit_func::<JitFn>(contents);
+    let func = jit_func::<Func>(contents);
 
     assert_eq!(func(4), 8);
 }
