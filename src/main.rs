@@ -17,8 +17,6 @@ mod raw;
 mod region;
 mod safe;
 
-type JitFn = extern "C" fn(n: int) -> int;
-
 /**
  * JIT a function dynamically. This will compile the contents (x86 instructions)
  * and return a function that you can call normally.
@@ -50,9 +48,10 @@ fn test_jit_func() {
         Err(err) => fail!(err)
     };
 
-    let func = jit_func::<JitFn>(contents, region);
-    assert_eq!(func(4), 8);
-    println!("value: {}", func(4));
+    type AddFourFn = extern "C" fn(n: int) -> int;
+    let Add = jit_func::<AddFourFn>(contents, region);
+    assert_eq!(Add(4), 8);
+    println!("value: {}", Add(4));
 }
 
 fn main() {}
