@@ -4,12 +4,7 @@
 #[license = "MIT"];
 #[feature(macro_rules)];
 #[allow(dead_code)];
-#[allow(unused_variable)];
-#[allow(unused_imports)];
 
-use std::libc::{c_char, size_t, c_void};
-use std::libc;
-use std::os;
 use std::cast;
 use region::MappedRegion;
 

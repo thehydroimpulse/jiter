@@ -1,6 +1,3 @@
-#[allow(unused_imports)];
-#[allow(unused_variable)];
-
 use region::MappedRegion;
 use std::libc::{c_char, size_t, c_void};
 use std::libc;
