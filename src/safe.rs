@@ -4,6 +4,8 @@
 use region::MappedRegion;
 use std::libc::{c_char, size_t, c_void};
 use std::libc;
+use std::os;
+
 mod raw;
 mod region;
 
@@ -15,7 +17,7 @@ mod region;
  * @return {Result<MappedRegion, ~str>}
  */
 
-pub fn mmap(size: u64) -> ~MappedRegion {
+pub fn mmap(size: u64) -> Result<~MappedRegion, ~str> {
     unsafe {
         let buf = raw::mmap(
             0 as *libc::c_char,
@@ -26,11 +28,11 @@ pub fn mmap(size: u64) -> ~MappedRegion {
             0
         );
 
-        //if buf == -1 as *u8 {
-        //Err(os::last_os_error())
-        //} else {
-        ~MappedRegion{ addr: buf, len: size }
-        //}
+        if buf == -1 as *u8 {
+          Err(os::last_os_error())
+        } else {
+          Ok(~MappedRegion{ addr: buf, len: size })
+        }
     }
 }
 

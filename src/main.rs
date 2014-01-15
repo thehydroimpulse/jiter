@@ -19,7 +19,6 @@ mod safe;
 
 type JitFn = extern "C" fn(n: int) -> int;
 
-
 /**
  * JIT a function dynamically. This will compile the contents (x86 instructions)
  * and return a function that you can call normally.
@@ -46,7 +45,10 @@ fn test_jit_func() {
         0xc3                    // ret
     ];
 
-    let region = safe::mmap(contents.len() as u64);
+    let region = match safe::mmap(contents.len() as u64) {
+        Ok(r) => r,
+        Err(err) => fail!(err)
+    };
 
     let func = jit_func::<JitFn>(contents, region);
     assert_eq!(func(4), 8);
