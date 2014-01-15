@@ -48,13 +48,9 @@ fn test_jit_func() {
 
     let region = safe::mmap(contents.len() as u64);
 
-    //let region = match safe_mmap(contents.len() as u64) {
-    //    Ok(r) => r,
-    //    Err(err) => fail!(err)
-    //};
-
-    //let func = jit_func::<JitFn>(contents, &region);
-    //assert_eq!(func(4), 8);
+    let func = jit_func::<JitFn>(contents, region);
+    assert_eq!(func(4), 8);
+    println!("value: {}", func(4));
 }
 
 fn main() {}
