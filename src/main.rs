@@ -2,8 +2,6 @@
 #[desc = "Jiter"];
 #[crate_type = "bin"];
 #[license = "MIT"];
-#[warn(non_camel_case_types)];
-#[feature(globs)];
 
 use std::ptr;
 use std::libc::{c_char, size_t, c_void, PROT_EXEC};
@@ -17,12 +15,32 @@ type JitFn = extern "C" fn(n: int) -> int;
 pub mod raw {
     use std::libc;
     extern {
-        pub fn mmap(addr : *libc::c_char, length : libc::size_t,
-                prot : libc::c_int,   flags  : libc::c_int,
-                fd   : libc::c_int,   offset : libc::off_t) -> *u8;
-        pub fn munmap(addr : *u8, length : libc::size_t) -> libc::c_int;
-        pub fn mprotect(addr: *libc::c_char, length: libc::size_t, prot: libc::c_int) -> libc::c_int;
-        pub fn memcpy(dest: *libc::c_void, src: *libc::c_void, n: libc::size_t) -> *libc::c_void;
+
+        pub fn mmap(
+            addr : *libc::c_char,
+            length : libc::size_t,
+            prot : libc::c_int,
+            flags  : libc::c_int,
+            fd   : libc::c_int,
+            offset : libc::off_t
+        ) -> *u8;
+
+        pub fn munmap(
+            addr : *u8,
+            length : libc::size_t
+        ) -> libc::c_int;
+
+        pub fn mprotect(
+            addr: *libc::c_char,
+            length: libc::size_t,
+            prot: libc::c_int
+        ) -> libc::c_int;
+
+        pub fn memcpy(
+            dest: *libc::c_void,
+            src: *libc::c_void,
+            n: libc::size_t
+        ) -> *libc::c_void;
     }
 
     pub static PROT_NONE   : libc::c_int = 0x0;
@@ -56,19 +74,6 @@ impl Drop for MappedRegion {
     }
 }
 
-#[inline(never)]
-unsafe fn mmap(size: size_t) -> Result<MappedRegion, ~str> {
-    let buf = raw::mmap(0 as *libc::c_char, size,
-        libc::PROT_READ | libc::PROT_WRITE,
-        libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0);
-
-    return if buf == -1 as *u8 {
-        Err(os::last_os_error())
-    } else {
-        Ok(MappedRegion{ addr: buf, len: size })
-    }
-}
-
 pub unsafe fn make_mem_exec(m: *u8, size: size_t) -> int {
     if raw::mprotect(m as *libc::c_char, size, libc::PROT_READ | PROT_EXEC) == -1 {
         fail!("err: mprotect");
@@ -82,38 +87,42 @@ pub unsafe fn emit_code(src: *u8, len: uint, mem: &MappedRegion) {
     ptr::copy_memory(mem.addr as *mut c_void, src as *mut c_void, len);
 }
 
-unsafe fn safe_mmap(size: u64) -> Result<MappedRegion, ~str> {
-    let buf = raw::mmap(0 as *libc::c_char, size, libc::PROT_READ | libc::PROT_WRITE,
-        libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0);
-    if buf == -1 as *u8 {
-        Err(os::last_os_error())
-    } else {
-        Ok(MappedRegion{ addr: buf, len: size })
+fn safe_mmap(size: u64) -> Result<MappedRegion, ~str> {
+    unsafe {
+        let buf = raw::mmap(0 as *libc::c_char, size, libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0);
+        if buf == -1 as *u8 {
+            Err(os::last_os_error())
+        } else {
+            Ok(MappedRegion{ addr: buf, len: size })
+        }
+    }
+}
+
+#[test]
+fn test_safe_mmap() {
+    let contents = [0,1,2];
+
+    match safe_mmap(contents.len() as u64) {
+        Ok(_) => assert!(true),
+        Err(err) => fail!(err)
     }
 }
 
 fn main() {
 
-  let code = [
-    0x48, 0x89, 0xf8,       // mov %rdi, %rax
-    0x48, 0x83, 0xc0, 0x04, // add $4, %rax
-    0xc3                    // ret
-  ];
+    let code = [
+        0x48, 0x89, 0xf8,       // mov %rdi, %rax
+        0x48, 0x83, 0xc0, 0x04, // add $4, %rax
+        0xc3                    // ret
+    ];
 
-  unsafe {
+    let region = match safe_mmap(code.len() as u64) {
+        Ok(r) => r,
+        Err(err) => fail!(err)
+    };
 
-        //println("mmapping a new memory region: [writable] [readable] [private] [anon]");
-        //let buf = raw::mmap(0 as *libc::c_char, code.len() as u64, libc::PROT_READ | libc::PROT_WRITE,
-        //    libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0);
-
-        //if buf == -1 as *u8 {
-        //    fail!(os::last_os_error());
-        //}
-
-        let region = match safe_mmap(code.len() as u64) {
-            Ok(r) => r,
-            Err(err) => fail!(err)
-        };
+    unsafe {
 
         let buf = region.addr;
 
