@@ -9,24 +9,24 @@ extern {
         flags  : libc::c_int,
         fd   : libc::c_int,
         offset : libc::off_t
-        ) -> *u8;
+    ) -> *u8;
 
     pub fn munmap(
         addr : *u8,
         length : libc::size_t
-        ) -> libc::c_int;
+    ) -> libc::c_int;
 
     pub fn mprotect(
-        addr: *libc::c_char,
+        addr: *libc::c_void,
         length: libc::size_t,
         prot: libc::c_int
-        ) -> libc::c_int;
+    ) -> libc::c_int;
 
     pub fn memcpy(
         dest: *libc::c_void,
         src: *libc::c_void,
         n: libc::size_t
-        ) -> *libc::c_void;
+    ) -> *libc::c_void;
 }
 
 pub static PROT_NONE   : libc::c_int = 0x0;
