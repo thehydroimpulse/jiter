@@ -54,4 +54,19 @@ fn test_jit_func() {
     println!("value: {}", Add(4));
 }
 
-fn main() {}
+fn main() {
+    let contents = [
+        0x48, 0x89, 0xf8,       // mov %rdi, %rax
+        0x48, 0x83, 0xc0, 0x04, // add $4, %rax
+        0xc3                    // ret
+    ];
+
+    let region = match safe::mmap(contents.len() as u64) {
+        Ok(r) => r,
+        Err(err) => fail!(err)
+    };
+
+    type AddFourFn = extern "C" fn(n: int) -> int;
+    let Add = jit_func::<AddFourFn>(contents, region);
+    println!("Add Return Value: {}", Add(4));
+}
