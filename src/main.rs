@@ -2,55 +2,18 @@
 #[desc = "Jiter"];
 #[crate_type = "bin"];
 #[license = "MIT"];
+#[feature(macro_rules)];
+#[allow(dead_code)];
 
-use std::ptr;
 use std::libc::{c_char, size_t, c_void, PROT_EXEC};
 use std::libc;
 use std::os;
 use std::cast;
 
+mod raw;
+
 #[no_mangle]
 type JitFn = extern "C" fn(n: int) -> int;
-
-pub mod raw {
-    use std::libc;
-    extern {
-
-        pub fn mmap(
-            addr : *libc::c_char,
-            length : libc::size_t,
-            prot : libc::c_int,
-            flags  : libc::c_int,
-            fd   : libc::c_int,
-            offset : libc::off_t
-        ) -> *u8;
-
-        pub fn munmap(
-            addr : *u8,
-            length : libc::size_t
-        ) -> libc::c_int;
-
-        pub fn mprotect(
-            addr: *libc::c_char,
-            length: libc::size_t,
-            prot: libc::c_int
-        ) -> libc::c_int;
-
-        pub fn memcpy(
-            dest: *libc::c_void,
-            src: *libc::c_void,
-            n: libc::size_t
-        ) -> *libc::c_void;
-    }
-
-    pub static PROT_NONE   : libc::c_int = 0x0;
-    pub static PROT_READ   : libc::c_int = 0x1;
-    pub static PROT_WRITE  : libc::c_int = 0x2;
-    pub static PROT_EXEC   : libc::c_int = 0x4;
-
-    pub static MAP_SHARED  : libc::c_int = 0x1;
-    pub static MAP_PRIVATE : libc::c_int = 0x2;
-}
 
 struct MappedRegion {
     addr: *u8,
@@ -82,21 +45,138 @@ pub unsafe fn make_mem_exec(m: *u8, size: size_t) -> int {
     return 0;
 }
 
-// Guessing the bus error is here.
-pub unsafe fn emit_code(src: *u8, len: uint, mem: &MappedRegion) {
-    ptr::copy_memory(mem.addr as *mut c_void, src as *mut c_void, len);
+/**
+ * Provide a safe interface to the native `memcpy` function.
+ *
+ * @safe
+ * @param {&MappedRegion} region
+ * @param {&[u8]} contents
+ */
+
+pub fn safe_memcpy(region: &MappedRegion, contents: &[u8]) {
+    unsafe {
+        raw::memcpy(
+            region.addr as * c_void,
+            contents.as_ptr() as *c_void,
+            contents.len() as size_t);
+    }
 }
+
+#[test]
+fn test_safe_memcpy() {
+    let contents = [0x48, 0x0c];
+
+    let region = match safe_mmap(contents.len() as u64) {
+        Ok(r) => r,
+        Err(err) => fail!(err)
+    };
+
+    safe_memcpy(&region, contents);
+
+    // Check the contents of the new mapped memory region.
+    unsafe {
+        assert!(*(contents.as_ptr()) == *region.addr);
+    }
+}
+
+/**
+ * Provide a safe interface to the native `mmap` function.
+ *
+ * @safe
+ * @param {u64} size
+ * @return {Result<MappedRegion, ~str>}
+ */
 
 fn safe_mmap(size: u64) -> Result<MappedRegion, ~str> {
     unsafe {
         let buf = raw::mmap(0 as *libc::c_char, size, libc::PROT_READ | libc::PROT_WRITE,
             libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0);
+
         if buf == -1 as *u8 {
             Err(os::last_os_error())
         } else {
             Ok(MappedRegion{ addr: buf, len: size })
         }
     }
+}
+
+fn safe_mem_protect(region: &MappedRegion, contents: &[u8]) {
+    unsafe {
+        if raw::mprotect(
+            region.addr as *libc::c_char,
+            contents.len() as u64,
+            libc::PROT_READ | PROT_EXEC
+        ) == -1 {
+            fail!("err: mprotect failed to protect the memory region.");
+        }
+    }
+}
+
+/**
+ * JIT a function dynamically. This will compile the contents (x86 instructions)
+ * and return a function that you can call normally.
+ *
+ * @safe
+ * @param {&[u8]} contents
+ */
+
+fn jit_func<F>(contents: &[u8]) -> F {
+    let region = match safe_mmap(contents.len() as u64) {
+        Ok(r) => r,
+        Err(err) => fail!(err)
+    };
+
+    safe_memcpy(&region, contents);
+
+    // Check the contents of the new mapped memory region.
+    unsafe {
+        assert_eq!(*(contents.as_ptr()), *region.addr);
+    }
+
+    safe_mem_protect(&region, contents);
+
+    unsafe {
+        let func: F = cast::transmute(region.addr);
+        return func;
+    }
+}
+
+#[test]
+fn test_jit_func() {
+    let contents = [
+        0x48, 0x89, 0xf8,       // mov %rdi, %rax
+        0x48, 0x83, 0xc0, 0x04, // add $4, %rax
+        0xc3                    // ret
+    ];
+
+    type Func = extern "C" fn(n: int) -> int;
+    let func = jit_func::<JitFn>(contents);
+
+    assert_eq!(func(4), 8);
+}
+
+
+#[test]
+fn test_safe_mem_protect() {
+    let contents = [
+        0x48, 0x89, 0xf8,       // mov %rdi, %rax
+        0x48, 0x83, 0xc0, 0x04, // add $4, %rax
+        0xc3                    // ret
+    ];
+
+    let region = match safe_mmap(contents.len() as u64) {
+        Ok(r) => r,
+        Err(err) => fail!(err)
+    };
+
+    safe_memcpy(&region, contents);
+
+    // Check the contents of the new mapped memory region.
+    unsafe {
+        assert!(*(contents.as_ptr()) == *region.addr);
+    }
+
+    safe_mem_protect(&region, contents);
 }
 
 #[test]
@@ -126,18 +206,17 @@ fn main() {
 
         let buf = region.addr;
 
-        println("copying machine code into memory.");
-        raw::memcpy(buf as * c_void, code.as_ptr() as *c_void, code.len() as size_t);
+        //raw::memcpy(buf as * c_void, code.as_ptr() as *c_void, code.len() as size_t);
 
-        println!("original: {} mmapped: {}", *(code.as_ptr()), *buf);
+        //println!("original: {} mmapped: {}", *(code.as_ptr()), *buf);
 
         // Check the mmapped region contains the exact correct contents.
-        assert!(*(code.as_ptr()) == *buf);
+        //assert!(*(code.as_ptr()) == *buf);
 
-        println("protecting the mmapped region.");
-        if raw::mprotect(buf as *libc::c_char, code.len() as u64, libc::PROT_READ | PROT_EXEC) == -1 {
-            fail!("err: mprotect");
-        }
+        //println("protecting the mmapped region.");
+        //if raw::mprotect(buf as *libc::c_char, code.len() as u64, libc::PROT_READ | PROT_EXEC) == -1 {
+        //    fail!("err: mprotect");
+        //}
 
         let func: JitFn = cast::transmute(buf);
         let value = func(5);
