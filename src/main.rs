@@ -9,41 +9,12 @@ use std::libc::{c_char, size_t, c_void, PROT_EXEC};
 use std::libc;
 use std::os;
 use std::cast;
+use region::MappedRegion;
 
 mod raw;
+mod region;
 
-#[no_mangle]
 type JitFn = extern "C" fn(n: int) -> int;
-
-struct MappedRegion {
-    addr: *u8,
-    len: u64
-}
-
-impl std::fmt::Default for MappedRegion {
-    fn fmt(value: &MappedRegion, f: &mut std::fmt::Formatter) {
-        write!(f.buf, "MappedRegion\\{{}, {}\\}", value.addr, value.len);
-    }
-}
-
-impl Drop for MappedRegion {
-    #[inline(never)]
-    fn drop(&mut self) {
-        unsafe {
-            if raw::munmap(self.addr, self.len) < 0 {
-                fail!(format!("munmap({}, {}): {}", self.addr, self.len, os::last_os_error()));
-            }
-        }
-    }
-}
-
-pub unsafe fn make_mem_exec(m: *u8, size: size_t) -> int {
-    if raw::mprotect(m as *libc::c_char, size, libc::PROT_READ | PROT_EXEC) == -1 {
-        fail!("err: mprotect");
-    }
-
-    return 0;
-}
 
 /**
  * Provide a safe interface to the native `memcpy` function.
