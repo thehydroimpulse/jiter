@@ -41,13 +41,13 @@ pub fn mmap(size: u64) -> Result<~MappedRegion, ~str> {
  * @param {&[u8]} contents
  */
 
-pub fn memcpy(region: &MappedRegion, contents: *u8) {
+pub fn memcpy(region: &MappedRegion, contents: &[u8]) {
     unsafe {
         raw::memcpy(
             region.addr as * c_void,
-            contents as *c_void,
+            contents.as_ptr() as *c_void,
             region.len as size_t);
-        assert_eq!(*contents, *region.addr);
+        assert_eq!(*(contents.as_ptr()), *region.addr);
     }
 }
 

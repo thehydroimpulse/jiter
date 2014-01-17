@@ -19,9 +19,9 @@ mod safe;
  * @param {&[u8]} contents
  */
 
-fn jit_func<T>(contents: &[u8], region: &MappedRegion) -> T {
+fn jit_func<T>(region: &MappedRegion, contents: &[u8]) -> T {
     unsafe {
-        safe::memcpy(region, contents.as_ptr());
+        safe::memcpy(region, contents);
         safe::mprotect(region, contents);
         assert_eq!(*(contents.as_ptr()), *region.addr);
         cast::transmute(region.addr)
@@ -43,7 +43,7 @@ fn test_jit_func() {
     };
 
     let Add = jit_func::<extern "C" fn(int) -> int>
-        (contents, region);
+        (region, contents);
 
     assert_eq!(Add(4), 8);
     println!("value: {}", Add(4));
@@ -62,6 +62,6 @@ fn main() {
     };
 
     type AddFourFn = extern "C" fn(n: int) -> int;
-    let Add = jit_func::<AddFourFn>(contents, region);
+    let Add = jit_func::<AddFourFn>(region, contents);
     println!("Add Return Value: {}", Add(4));
 }
