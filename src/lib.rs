@@ -60,6 +60,3 @@ fn test_jit_func() {
     assert_eq!(Add(4), 8);
     println!("value: {}", Add(4));
 }
-
-fn main() {
-}
