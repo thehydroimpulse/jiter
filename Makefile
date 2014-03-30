@@ -1,7 +1,7 @@
 test:
 	mkdir -p target
 	rustc --test --out-dir target src/lib.rs
-	./target/lib
+	./target/jiter
 
 bin:
 	mkdir -p target
