@@ -14,13 +14,6 @@ use std::ptr;
 use std::libc;
 use std::os::{MemoryMap,MapReadable,MapWritable};
 
-/**
- *
- * @safe
- * @param {&[u8]} contents
- */
-
-
 /// Dynamically compile a function down to machine code. This will compile the
 /// contents (x86 instructions) and return a function that you can call normally.
 ///
