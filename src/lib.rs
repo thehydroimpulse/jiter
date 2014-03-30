@@ -3,26 +3,41 @@
 #[crate_type = "lib"];
 #[license = "MIT"];
 
+//! Jitter allows you to dynamically compile machine code during runtime. This allows you
+//! to speed up certain operations, in some cases.
+//!
+//! This library is fairly low-level, and currently doesn't support any helper functions
+//! to produce assembly code.
+
 use std::cast;
 use std::ptr;
 use std::libc;
 use std::os::{MemoryMap,MapReadable,MapWritable};
 
 /**
- * JIT a function dynamically. This will compile the contents (x86 instructions)
- * and return a function that you can call normally.
  *
  * @safe
  * @param {&[u8]} contents
  */
 
+
+/// Dynamically compile a function down to machine code. This will compile the
+/// contents (x86 instructions) and return a function that you can call normally.
+///
+/// For security reasons, you're unable to write to the memory mapped region after
+/// (or during) this function.
 fn jit_func<T>(region: &MemoryMap, contents: &[u8]) -> T {
     unsafe {
         ptr::copy_memory(region.data, contents.as_ptr(), region.len);
         libc::mprotect(region.data as *libc::c_void, 
                        region.len as libc::size_t, 
                        libc::PROT_EXEC | libc::PROT_READ as libc::c_int);
-        assert_eq!(*(contents.as_ptr()), *region.data);
+
+        for i in std::iter::range(0, contents.len()) {
+            assert_eq!(*(contents.as_ptr().offset(i as int)),
+                       *region.data.offset(i as int));
+        }
+
         cast::transmute(region.data)
     }
 }
