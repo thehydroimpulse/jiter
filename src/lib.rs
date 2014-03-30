@@ -14,6 +14,25 @@ use std::ptr;
 use std::libc;
 use std::os::{MemoryMap,MapReadable,MapWritable};
 
+/// A function type in the context of a JIT-compiler.
+pub struct Function<T> {
+    map: Option<MemoryMap>,
+    func: Option<T>
+}
+
+impl<T> Function<T> {
+
+    /// Allocate a new `Function<T>`. We don't have enough information
+    /// to reserve the memory needed or the function itself.
+    pub fn new() -> Function<T> {
+        Function {
+            map: None,
+            func: None
+        }
+    }
+
+}
+
 /// Dynamically compile a function down to machine code. This will compile the
 /// contents (x86 instructions) and return a function that you can call normally.
 ///
