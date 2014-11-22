@@ -6,11 +6,8 @@ use std::os::{MemoryMap, MapReadable, MapWritable};
 
 unsafe fn transmute_harder<T, U>(from: T) -> U {
     let mut to: U = mem::uninitialized();
-    // copy_memory and forget can't trigger failure, so `from` and `to` won't have destructor run
-    // extraneously
     let p = &mut to as *mut U;
     *p = ptr::read(&from as *const _ as *const U);
-    ptr::copy_memory(&mut to as *mut U, &from as *const _ as *const U, 1);
     mem::forget(from);
     to
 }
