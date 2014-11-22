@@ -1,4 +1,6 @@
 jit
+Cargo.lock
+target
 src/main
 src/jit
 main

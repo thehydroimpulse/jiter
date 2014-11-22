@@ -1,0 +1,5 @@
+[package]
+name = "jitter"
+version = "0.1.0"
+license = "MIT"
+authors = ["Daniel Fagnan <dnfagmam@gmail.com>"]
